@@ -4,47 +4,11 @@
     android:layout_height="match_parent"
     android:background="@android:color/black">
 
+    <!-- SlideshowActivity adds the two photo slots here. -->
     <FrameLayout
-        android:id="@+id/slot_a"
+        android:id="@+id/stage"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="invisible">
-
-        <ImageView
-            android:id="@+id/backdrop_a"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no"
-            android:scaleType="centerCrop" />
-
-        <ImageView
-            android:id="@+id/photo_a"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no"
-            android:scaleType="fitCenter" />
-    </FrameLayout>
-
-    <FrameLayout
-        android:id="@+id/slot_b"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="invisible">
-
-        <ImageView
-            android:id="@+id/backdrop_b"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no"
-            android:scaleType="centerCrop" />
-
-        <ImageView
-            android:id="@+id/photo_b"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no"
-            android:scaleType="fitCenter" />
-    </FrameLayout>
+        android:layout_height="match_parent" />
 
     <TextView
         android:id="@+id/status"
@@ -69,6 +33,15 @@
         android:id="@+id/photo_date"
         style="@style/Overlay"
         android:layout_gravity="bottom|start"
+        android:layout_margin="40dp"
+        android:textSize="22sp"
+        android:visibility="gone" />
+
+    <!-- Date of the right-hand photo when two portrait photos are shown side by side. -->
+    <TextView
+        android:id="@+id/photo_date_2"
+        style="@style/Overlay"
+        android:layout_gravity="bottom|end"
         android:layout_margin="40dp"
         android:textSize="22sp"
         android:visibility="gone" />

@@ -2,25 +2,31 @@ package app.photoframe.tv
 
 import android.content.Intent
 import android.content.SharedPreferences
+import android.graphics.Color
 import android.graphics.PorterDuff
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import com.bumptech.glide.Glide
+import com.bumptech.glide.MemoryCategory
 import com.bumptech.glide.RequestBuilder
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.GlideException
+import com.bumptech.glide.load.resource.bitmap.DownsampleStrategy
 import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
 import kotlinx.coroutines.Job
@@ -29,14 +35,21 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.Date
 import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 class SlideshowActivity : ComponentActivity() {
 
-    /** Two of these are stacked; the hidden one loads the next photo, then they swap. */
-    private class Slot(val root: FrameLayout, val backdrop: ImageView, val photo: ImageView)
+    /** One photo's area: a blurred backdrop with the photo on top. */
+    private class Pane(val root: FrameLayout, val backdrop: ImageView, val photo: ImageView)
 
-    /** Where the front photo's slow zoom or Ken Burns drift is heading, so it can resume after a pause. */
+    /**
+     * Two of these are stacked; the hidden one loads the next slide, then they swap.
+     * A slide is one photo, or two portrait photos side by side (the second pane and the gap are hidden otherwise).
+     */
+    private class Slot(val root: LinearLayout, val panes: List<Pane>, val gap: View)
+
+    /** Where a photo's slow zoom or Ken Burns drift is heading, so it can resume after a pause. */
     private class Motion(val scale: Float, val dx: Float, val dy: Float)
 
     private lateinit var library: Library
@@ -44,23 +57,24 @@ class SlideshowActivity : ComponentActivity() {
 
     private lateinit var slots: Array<Slot>
     private var front = 0
+    private var gapPx = 0
     private lateinit var status: TextView
     private lateinit var clock: TextView
-    private lateinit var photoDate: TextView
+    private lateinit var photoDates: List<TextView>
     private lateinit var pausedBadge: TextView
 
     private val handler = Handler(Looper.getMainLooper())
     private var pool: List<Photo> = emptyList()
     private val queue = ArrayDeque<Photo>()
-    private val history = ArrayList<Photo>()
+    private val history = ArrayList<List<Photo>>()
     private var historyIndex = -1
-    private var current: Photo? = null
+    private var current: List<Photo>? = null
     private var started = false
     private var paused = false
     private var loadToken = 0
     private var failures = 0
     private var refreshJob: Job? = null
-    private var motion: Motion? = null
+    private var motions: List<Pair<View, Motion>> = emptyList()
 
     private val advance = Runnable { showNext() }
 
@@ -85,16 +99,44 @@ class SlideshowActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_slideshow)
         library = Library.get(this)
+        // Photos are loaded a bit larger than the screen (see loadScale), so let Glide keep more in memory.
+        Glide.get(this).setMemoryCategory(MemoryCategory.HIGH)
 
-        slots = arrayOf(
-            Slot(findViewById(R.id.slot_a), findViewById(R.id.backdrop_a), findViewById(R.id.photo_a)),
-            Slot(findViewById(R.id.slot_b), findViewById(R.id.backdrop_b), findViewById(R.id.photo_b)),
-        )
-        for (slot in slots) slot.backdrop.setColorFilter(0xFF707070.toInt(), PorterDuff.Mode.MULTIPLY)
+        gapPx = (6 * resources.displayMetrics.density).roundToInt()
+        val stage = findViewById<FrameLayout>(R.id.stage)
+        slots = arrayOf(createSlot(stage), createSlot(stage))
         status = findViewById(R.id.status)
         clock = findViewById(R.id.clock)
-        photoDate = findViewById(R.id.photo_date)
+        photoDates = listOf(findViewById(R.id.photo_date), findViewById(R.id.photo_date_2))
         pausedBadge = findViewById(R.id.paused)
+    }
+
+    private fun createSlot(stage: FrameLayout): Slot {
+        val match = ViewGroup.LayoutParams.MATCH_PARENT
+        val panes = List(2) {
+            val backdrop = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setColorFilter(0xFF707070.toInt(), PorterDuff.Mode.MULTIPLY)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+            val photo = ImageView(this).apply { importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO }
+            val root = FrameLayout(this).apply {
+                addView(backdrop, match, match)
+                addView(photo, match, match)
+            }
+            Pane(root, backdrop, photo)
+        }
+        val gap = View(this)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setBackgroundColor(Color.BLACK)
+            visibility = View.INVISIBLE
+            addView(panes[0].root, LinearLayout.LayoutParams(0, match, 1f))
+            addView(gap, LinearLayout.LayoutParams(gapPx, match))
+            addView(panes[1].root, LinearLayout.LayoutParams(0, match, 1f))
+        }
+        stage.addView(root, match, match)
+        return Slot(root, panes, gap)
     }
 
     override fun onStart() {
@@ -137,13 +179,12 @@ class SlideshowActivity : ComponentActivity() {
     private fun togglePause() {
         paused = !paused
         pausedBadge.visibility = if (paused) View.VISIBLE else View.GONE
-        val photo = slots[front].photo
         if (paused) {
             handler.removeCallbacks(advance)
-            photo.animate().cancel() // freezes the zoom where it is
+            for ((view, _) in motions) view.animate().cancel() // freezes the zoom where it is
         } else {
             scheduleNext()
-            motion?.let { startMotion(photo, it, settings.intervalSeconds * 1000L) }
+            for ((view, motion) in motions) startMotion(view, motion, settings.intervalSeconds * 1000L)
         }
     }
 
@@ -168,8 +209,8 @@ class SlideshowActivity : ComponentActivity() {
         pool = photos
 
         queue.retainAll { it.id in newIds }
-        if (history.any { it.id !in newIds }) {
-            history.retainAll { it.id in newIds }
+        if (history.any { slide -> slide.any { it.id !in newIds } }) {
+            history.retainAll { slide -> slide.all { it.id in newIds } }
             historyIndex = history.size - 1
         }
         // Mix newly added photos into the rest of this round so they show up soon.
@@ -188,7 +229,35 @@ class SlideshowActivity : ComponentActivity() {
         if (pool.isEmpty()) return
         queue.addAll(if (settings.shuffle) pool.shuffled() else pool)
         // Don't show the same photo twice in a row across rounds.
-        if (queue.size > 1 && queue.first().id == current?.id) queue.add(queue.removeAt(0))
+        val shown = current.orEmpty()
+        if (queue.size > 1 && shown.any { it.id == queue.first().id }) queue.add(queue.removeAt(0))
+    }
+
+    /** The slide the queue gives next: its first photo, plus the next portrait photo if that one is a portrait too. */
+    private fun upcomingSlide(consume: Boolean): List<Photo>? {
+        if (queue.isEmpty()) refillQueue()
+        val first = queue.firstOrNull() ?: return null
+        var partner = -1
+        if (canPair(first)) {
+            for (i in 1 until queue.size) {
+                if (queue[i].id != first.id && canPair(queue[i])) {
+                    partner = i
+                    break
+                }
+            }
+        }
+        val slide = if (partner > 0) listOf(first, queue[partner]) else listOf(first)
+        if (consume) {
+            if (partner > 0) queue.removeAt(partner)
+            queue.removeAt(0)
+        }
+        return slide
+    }
+
+    private fun canPair(photo: Photo): Boolean {
+        if (!settings.pairPortraits) return false
+        val (w, h) = stageSize()
+        return w > h && photo.width > 0 && photo.height > photo.width * 1.1f
     }
 
     private fun showNext() {
@@ -198,8 +267,7 @@ class SlideshowActivity : ComponentActivity() {
             display(history[historyIndex], backwards = false)
             return
         }
-        if (queue.isEmpty()) refillQueue()
-        val next = queue.removeFirstOrNull()
+        val next = upcomingSlide(consume = true)
         if (next == null) {
             updateStatus()
             return
@@ -216,76 +284,127 @@ class SlideshowActivity : ComponentActivity() {
         display(history[historyIndex], backwards = true)
     }
 
-    private fun peekNext(): Photo? {
-        if (historyIndex < history.size - 1) return history[historyIndex + 1]
-        if (queue.isEmpty()) refillQueue()
-        return queue.firstOrNull()
-    }
+    private fun peekNext(): List<Photo>? =
+        if (historyIndex < history.size - 1) history[historyIndex + 1] else upcomingSlide(consume = false)
 
     // ---- Loading ----
 
-    private fun screenSize(): Pair<Int, Int> {
+    private fun stageSize(): Pair<Int, Int> {
         val metrics = resources.displayMetrics
-        var w = metrics.widthPixels.coerceAtLeast(640)
-        var h = metrics.heightPixels.coerceAtLeast(360)
-        if (w > 2560) {
-            h = h * 2560 / w
-            w = 2560
-        }
-        return w to h
+        return metrics.widthPixels.coerceAtLeast(640) to metrics.heightPixels.coerceAtLeast(360)
+    }
+
+    /** The size of each photo's area: the whole screen, or half of it (minus the gap) for a pair. */
+    private fun paneSize(paired: Boolean): Pair<Int, Int> {
+        val (w, h) = stageSize()
+        return if (paired) (w - gapPx) / 2 to h else w to h
     }
 
     private fun shouldCrop(photo: Photo, w: Int, h: Int): Boolean = when (settings.fitMode) {
         "fill" -> true
         "smart" -> {
-            val screen = w.toFloat() / h
-            abs(photo.aspect - screen) / screen < 0.2f
+            val area = w.toFloat() / h
+            abs(photo.aspect - area) / area < 0.2f
         }
         else -> false
     }
 
-    private fun photoRequest(photo: Photo): RequestBuilder<Drawable> {
-        val (w, h) = screenSize()
-        val crop = shouldCrop(photo, w, h)
-        val request = Glide.with(this).load(photo.sizedUrl(w, h, crop)).override(w, h)
-        return if (crop) request.centerCrop() else request.fitCenter()
+    /** How far photos zoom while on screen, at most (1 = they don't move). */
+    private fun maxZoom(): Float = when {
+        settings.transition == "kenburns" || settings.transition == "random" -> KEN_BURNS_SCALE
+        settings.slowZoom -> slowZoomScale()
+        else -> 1f
     }
 
-    /** A tiny version of the photo, stretched across the screen, makes a soft blurred background. */
+    /**
+     * How many bitmap pixels to load per screen pixel. A photo shown at about 1:1 that slowly zooms
+     * shimmers (moiré) on fine detail, so moving photos are loaded 1.3–1.5× sharper than the screen and
+     * scaled down with mipmaps. Photos without that much detail are loaded a bit softer instead, so they
+     * are always enlarged by at least 1.3×, which doesn't shimmer either.
+     */
+    private fun loadScale(photo: Photo, w: Int, h: Int, crop: Boolean): Float {
+        val zoom = maxZoom()
+        if (zoom <= 1f) return 1f
+        val wanted = 1.3f * zoom
+        if (photo.width <= 0 || photo.height <= 0) return wanted
+        val sx = photo.width.toFloat() / w
+        val sy = photo.height.toFloat() / h
+        val available = if (crop) minOf(sx, sy) else maxOf(sx, sy)
+        return if (available >= wanted) wanted else 0.75f
+    }
+
+    /** Loads the photo for a w×h area; the ImageView does the final fit or crop on the GPU. */
+    private fun photoRequest(photo: Photo, w: Int, h: Int, crop: Boolean): RequestBuilder<Drawable> {
+        val scale = loadScale(photo, w, h, crop)
+        var loadW = (w * scale).roundToInt()
+        var loadH = (h * scale).roundToInt()
+        val cap = MAX_LOAD_SIDE.toFloat() / maxOf(loadW, loadH)
+        if (cap < 1f) {
+            loadW = (loadW * cap).roundToInt()
+            loadH = (loadH * cap).roundToInt()
+        }
+        return Glide.with(this).load(photo.sizedUrl(loadW, loadH, crop))
+            .override(loadW, loadH)
+            .downsample(DownsampleStrategy.CENTER_INSIDE)
+            .dontTransform()
+    }
+
+    /** A tiny version of the photo, stretched across its area, makes a soft blurred background. */
     private fun backdropRequest(photo: Photo): RequestBuilder<Drawable> =
         Glide.with(this).load(photo.sizedUrl(96, 96)).override(64, 36).centerCrop()
 
-    private fun display(photo: Photo, backwards: Boolean) {
+    private fun display(slide: List<Photo>, backwards: Boolean) {
         handler.removeCallbacks(advance)
         val token = ++loadToken
         val target = slots[1 - front]
-        val (w, h) = screenSize()
-        val crop = shouldCrop(photo, w, h)
-        target.photo.scaleType = if (crop) ImageView.ScaleType.CENTER_CROP else ImageView.ScaleType.FIT_CENTER
+        val paired = slide.size > 1
+        val (w, h) = paneSize(paired)
+        target.gap.visibility = if (paired) View.VISIBLE else View.GONE
+        target.panes[1].root.visibility = if (paired) View.VISIBLE else View.GONE
+        var pending = slide.size
+        var failed = false
 
-        photoRequest(photo)
-            .listener(object : RequestListener<Drawable> {
-                override fun onLoadFailed(
-                    e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean,
-                ): Boolean {
-                    handler.post { if (token == loadToken) onPhotoFailed() }
-                    return false
-                }
+        for ((index, pane) in target.panes.withIndex()) {
+            val photo = slide.getOrNull(index)
+            if (photo == null) {
+                // Free the bitmaps of a pane this slide doesn't use.
+                Glide.with(this).clear(pane.photo)
+                Glide.with(this).clear(pane.backdrop)
+                continue
+            }
+            val crop = shouldCrop(photo, w, h)
+            pane.photo.scaleType = if (crop) ImageView.ScaleType.CENTER_CROP else ImageView.ScaleType.FIT_CENTER
+            photoRequest(photo, w, h, crop)
+                .listener(object : RequestListener<Drawable> {
+                    override fun onLoadFailed(
+                        e: GlideException?, model: Any?, target: Target<Drawable>, isFirstResource: Boolean,
+                    ): Boolean {
+                        handler.post {
+                            if (token == loadToken && !failed) {
+                                failed = true
+                                onPhotoFailed()
+                            }
+                        }
+                        return false
+                    }
 
-                override fun onResourceReady(
-                    resource: Drawable, model: Any, target: Target<Drawable>?, dataSource: DataSource, isFirstResource: Boolean,
-                ): Boolean {
-                    handler.post { if (token == loadToken) reveal(photo, backwards) }
-                    return false
-                }
-            })
-            .into(target.photo)
+                    override fun onResourceReady(
+                        resource: Drawable, model: Any, target: Target<Drawable>?, dataSource: DataSource, isFirstResource: Boolean,
+                    ): Boolean {
+                        // Smooth scaling down to the screen, so zooming doesn't shimmer.
+                        (resource as? BitmapDrawable)?.bitmap?.setHasMipMap(true)
+                        handler.post { if (token == loadToken && !failed && --pending == 0) reveal(slide, backwards) }
+                        return false
+                    }
+                })
+                .into(pane.photo)
 
-        if (crop) {
-            Glide.with(this).clear(target.backdrop)
-            target.backdrop.setImageDrawable(null)
-        } else {
-            backdropRequest(photo).into(target.backdrop)
+            if (crop) {
+                Glide.with(this).clear(pane.backdrop)
+                pane.backdrop.setImageDrawable(null)
+            } else {
+                backdropRequest(photo).into(pane.backdrop)
+            }
         }
     }
 
@@ -302,26 +421,32 @@ class SlideshowActivity : ComponentActivity() {
 
     private fun preloadNext() {
         val next = peekNext() ?: return
-        val (w, h) = screenSize()
-        photoRequest(next).preload(w, h)
-        if (!shouldCrop(next, w, h)) backdropRequest(next).preload(64, 36)
+        val (w, h) = paneSize(next.size > 1)
+        for (photo in next) {
+            val crop = shouldCrop(photo, w, h)
+            photoRequest(photo, w, h, crop).preload()
+            if (!crop) backdropRequest(photo).preload(64, 36)
+        }
     }
 
     // ---- Showing ----
 
-    private fun reveal(photo: Photo, backwards: Boolean) {
+    private fun reveal(slide: List<Photo>, backwards: Boolean) {
         val outgoing = slots[front]
         front = 1 - front
         val incoming = slots[front]
-        current = photo
+        current = slide
         failures = 0
         status.visibility = View.GONE
-        photoDate.text = if (photo.takenAt > 0) {
-            java.text.DateFormat.getDateInstance(java.text.DateFormat.LONG).format(Date(photo.takenAt))
-        } else {
-            ""
+        for ((index, label) in photoDates.withIndex()) {
+            val takenAt = slide.getOrNull(index)?.takenAt ?: 0L
+            label.text = if (takenAt > 0) {
+                java.text.DateFormat.getDateInstance(java.text.DateFormat.LONG).format(Date(takenAt))
+            } else {
+                ""
+            }
         }
-        animateSwap(outgoing, incoming, backwards)
+        animateSwap(outgoing, incoming, slide.size, backwards)
         scheduleNext()
         preloadNext()
     }
@@ -335,20 +460,24 @@ class SlideshowActivity : ComponentActivity() {
         }
     }
 
-    private fun animateSwap(outgoing: Slot, incoming: Slot, backwards: Boolean) {
+    private fun animateSwap(outgoing: Slot, incoming: Slot, photoCount: Int, backwards: Boolean) {
         val duration = transitionMillis()
-        for (view in listOf(outgoing.root, incoming.root, incoming.photo)) view.animate().cancel()
-        reset(incoming.root)
-        reset(incoming.photo)
+        val incomingPhotos = incoming.panes.take(photoCount).map { it.photo }
+        for (view in listOf<View>(outgoing.root, incoming.root) + incoming.panes.map { it.photo }) {
+            view.animate().cancel()
+            reset(view)
+        }
         incoming.root.translationZ = 1f
         outgoing.root.translationZ = 0f
         incoming.root.visibility = View.VISIBLE
 
         val hideOutgoing = Runnable {
             outgoing.root.visibility = View.INVISIBLE
-            outgoing.photo.animate().cancel()
             reset(outgoing.root)
-            reset(outgoing.photo)
+            for (pane in outgoing.panes) {
+                pane.photo.animate().cancel()
+                reset(pane.photo)
+            }
         }
 
         var type = settings.transition
@@ -385,24 +514,23 @@ class SlideshowActivity : ComponentActivity() {
                     .setInterpolator(LinearInterpolator()).withEndAction(hideOutgoing)
             }
         }
-        motion = null
-        when {
-            type == "kenburns" -> kenBurns(incoming.photo, duration)
-            settings.slowZoom -> slowZoom(incoming.photo, duration)
+
+        val (w, h) = paneSize(photoCount > 1)
+        motions = when {
+            type == "kenburns" -> incomingPhotos.map { it to kenBurns(it, w, h) }
+            settings.slowZoom -> incomingPhotos.map { it to Motion(slowZoomScale(), 0f, 0f) }
+            else -> emptyList()
         }
+        for ((view, motion) in motions) startMotion(view, motion, photoMillis())
     }
 
-    private fun photoMillis(transitionMs: Long) = settings.intervalSeconds * 1000L + transitionMs * 2
+    /** How long a photo is on screen, from the start of its transition in to the end of the one out. */
+    private fun photoMillis() = settings.intervalSeconds * 1000L + transitionMillis() * 2
 
-    /** Zooms in by a few percent at a steady, barely noticeable pace while the photo is on screen. */
-    private fun slowZoom(view: View, transitionMs: Long) {
-        val total = photoMillis(transitionMs)
-        val scale = 1f + (total / 1000f * 0.005f).coerceIn(0.03f, 0.08f)
-        startMotion(view, Motion(scale, 0f, 0f), total)
-    }
+    /** A few percent, at a steady, barely noticeable pace while the photo is on screen. */
+    private fun slowZoomScale() = 1f + (photoMillis() / 1000f * 0.005f).coerceIn(0.03f, 0.08f)
 
     private fun startMotion(view: View, target: Motion, durationMs: Long) {
-        motion = target
         if (paused) return
         view.animate()
             .scaleX(target.scale).scaleY(target.scale)
@@ -411,19 +539,19 @@ class SlideshowActivity : ComponentActivity() {
             .setInterpolator(LinearInterpolator())
     }
 
-    /** Slow zoom with a gentle drift; the drift never exceeds the zoom margin, so no edges show. */
-    private fun kenBurns(view: View, transitionMs: Long) {
-        val total = photoMillis(transitionMs)
-        val maxScale = 1.15f
-        val dx = (Random.nextFloat() * 2 - 1) * 0.06f * view.width
-        val dy = (Random.nextFloat() * 2 - 1) * 0.06f * view.height
+    /**
+     * Slow zoom with a gentle drift; the drift never exceeds the zoom margin, so no edges show.
+     * Sets the starting point on [view] and returns where it should end up.
+     */
+    private fun kenBurns(view: View, w: Int, h: Int): Motion {
+        val dx = (Random.nextFloat() * 2 - 1) * 0.06f * w
+        val dy = (Random.nextFloat() * 2 - 1) * 0.06f * h
         val zoomIn = Random.nextBoolean()
-        view.scaleX = if (zoomIn) 1f else maxScale
+        view.scaleX = if (zoomIn) 1f else KEN_BURNS_SCALE
         view.scaleY = view.scaleX
         view.translationX = if (zoomIn) 0f else dx
         view.translationY = if (zoomIn) 0f else dy
-        val target = if (zoomIn) Motion(maxScale, dx, dy) else Motion(1f, 0f, 0f)
-        startMotion(view, target, total)
+        return if (zoomIn) Motion(KEN_BURNS_SCALE, dx, dy) else Motion(1f, 0f, 0f)
     }
 
     private fun reset(view: View) {
@@ -440,7 +568,7 @@ class SlideshowActivity : ComponentActivity() {
         handler.removeCallbacks(tickClock)
         clock.visibility = if (settings.showClock) View.VISIBLE else View.GONE
         if (settings.showClock) tickClock.run()
-        photoDate.visibility = if (settings.showDate) View.VISIBLE else View.GONE
+        for (label in photoDates) label.visibility = if (settings.showDate) View.VISIBLE else View.GONE
     }
 
     private fun updateStatus() {
@@ -462,5 +590,10 @@ class SlideshowActivity : ComponentActivity() {
     private companion object {
         /** Only jump to settings automatically once per launch, so Back from settings still works. */
         var promptedForSetup = false
+
+        const val KEN_BURNS_SCALE = 1.15f
+
+        /** Keeps the loaded bitmap within what old Fire TV sticks handle comfortably. */
+        const val MAX_LOAD_SIDE = 3072
     }
 }

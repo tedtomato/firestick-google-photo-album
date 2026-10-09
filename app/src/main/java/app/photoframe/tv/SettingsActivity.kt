@@ -93,6 +93,9 @@ class SettingsActivity : ComponentActivity() {
             Settings.FIT_MODES.keys.toList(), Settings.FIT_MODES.values.toList(),
             { settings.fitMode },
         ) { settings.fitMode = it })
+        rows.addView(choiceRow("Two portrait photos side by side", ON_OFF, ON_OFF_LABELS, { onOff(settings.pairPortraits) }) {
+            settings.pairPortraits = it == "on"
+        })
         rows.addView(choiceRow(
             "Order",
             listOf("random", "album"), listOf("Random", "Album order"),

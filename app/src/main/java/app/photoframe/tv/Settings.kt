@@ -21,6 +21,11 @@ class Settings(private val prefs: SharedPreferences) {
         get() = prefs.getBoolean(KEY_SLOW_ZOOM, true)
         set(value) = prefs.edit().putBoolean(KEY_SLOW_ZOOM, value).apply()
 
+    /** Show two portrait photos side by side instead of one with wide empty edges. */
+    var pairPortraits: Boolean
+        get() = prefs.getBoolean(KEY_PAIR_PORTRAITS, true)
+        set(value) = prefs.edit().putBoolean(KEY_PAIR_PORTRAITS, value).apply()
+
     var shuffle: Boolean
         get() = prefs.getBoolean(KEY_SHUFFLE, true)
         set(value) = prefs.edit().putBoolean(KEY_SHUFFLE, value).apply()
@@ -42,6 +47,7 @@ class Settings(private val prefs: SharedPreferences) {
         const val KEY_TRANSITION = "transition"
         const val KEY_FIT = "fit"
         const val KEY_SLOW_ZOOM = "slowZoom"
+        const val KEY_PAIR_PORTRAITS = "pairPortraits"
         const val KEY_SHUFFLE = "shuffle"
         const val KEY_REFRESH = "refreshMinutes"
         const val KEY_CLOCK = "showClock"

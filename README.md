@@ -7,6 +7,7 @@ Photos added to an album later show up on the TV automatically, much like a Goog
 - Change photo every 3 s … 5 min
 - Transitions: crossfade, Ken Burns (slow zoom and pan), slide, zoom, fade through black, or a random mix
 - A slight, very slow zoom on every photo (can be turned off)
+- Two portrait photos side by side, like a Nest Hub (can be turned off)
 - Display modes: whole photo on a blurred background, fill the screen, or smart (fill landscape, fit portrait)
 - Optional clock and "date taken" overlays
 - Checks albums for new photos every 15 min to 12 h
