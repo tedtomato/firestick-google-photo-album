@@ -37,7 +37,9 @@ Every push to the default branch builds the APK with GitHub Actions and publishe
 **Option A — Downloader app (public repo):**
 1. On the Fire TV: *Settings → My Fire TV → Developer options → Install unknown apps* → allow **Downloader**.
    (If Developer options is hidden: *Settings → My Fire TV → About*, click the device name 7 times.)
-2. In Downloader, enter `https://github.com/tedtomato/firestick-google-photo-album/releases/latest/download/PhotoFrame.apk`.
+2. In Downloader, enter `tinyurl.com/tedframe`.
+   It points to `https://github.com/tedtomato/firestick-google-photo-album/releases/latest/download/PhotoFrame.apk`,
+   which always serves the newest build, so the same short link also installs updates.
 
 **Option B — adb from a computer (works with a private repo):**
 1. On the Fire TV: *Developer options → ADB debugging* → On. Note its IP under *About → Network*.

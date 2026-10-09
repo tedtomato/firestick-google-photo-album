@@ -22,6 +22,7 @@ for builds (GitHub Actions builds the APK).
 - Repo: https://github.com/tedtomato/firestick-google-photo-album (public). CI builds every branch and
   publishes the "latest" release from the default branch:
   https://github.com/tedtomato/firestick-google-photo-album/releases/latest/download/PhotoFrame.apk
+  (short link for Downloader: tinyurl.com/tedframe)
 - It compiles and the unit tests pass on CI (first try, no fixes needed).
 - Parser verified against a real album of the user's with the "Check album parsing" workflow
   (`LiveAlbumTest`, opt-in via `PHOTOFRAME_TEST_ALBUM`): title found, 38 photos, images load at
