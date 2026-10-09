@@ -1,0 +1,37 @@
+name: Check album parsing
+
+# Run by hand to check that a real shared album still parses (Actions → Check album parsing → Run workflow).
+# The link is masked in the logs, and the test prints only counts and status codes.
+on:
+  workflow_dispatch:
+    inputs:
+      album_url:
+        description: "Shared album link (https://photos.app.goo.gl/…)"
+        required: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mask the album link
+        run: echo "::add-mask::$(jq -r '.inputs.album_url' "$GITHUB_EVENT_PATH")"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Fetch and parse the album
+        env:
+          PHOTOFRAME_TEST_ALBUM: ${{ inputs.album_url }}
+        run: gradle --no-daemon testReleaseUnitTest --tests app.photoframe.tv.LiveAlbumTest
+
+      - name: Report
+        if: always()
+        run: cat app/build/live-album-report.txt || echo "No report was written"
