@@ -16,6 +16,11 @@ class Settings(private val prefs: SharedPreferences) {
         get() = prefs.getString(KEY_FIT, "blur") ?: "blur"
         set(value) = prefs.edit().putString(KEY_FIT, value).apply()
 
+    /** A slight, very slow zoom-in on every photo, whatever the transition. */
+    var slowZoom: Boolean
+        get() = prefs.getBoolean(KEY_SLOW_ZOOM, true)
+        set(value) = prefs.edit().putBoolean(KEY_SLOW_ZOOM, value).apply()
+
     var shuffle: Boolean
         get() = prefs.getBoolean(KEY_SHUFFLE, true)
         set(value) = prefs.edit().putBoolean(KEY_SHUFFLE, value).apply()
@@ -36,6 +41,7 @@ class Settings(private val prefs: SharedPreferences) {
         const val KEY_INTERVAL = "interval"
         const val KEY_TRANSITION = "transition"
         const val KEY_FIT = "fit"
+        const val KEY_SLOW_ZOOM = "slowZoom"
         const val KEY_SHUFFLE = "shuffle"
         const val KEY_REFRESH = "refreshMinutes"
         const val KEY_CLOCK = "showClock"

@@ -85,6 +85,9 @@ class SettingsActivity : ComponentActivity() {
             Settings.TRANSITIONS.keys.toList(), Settings.TRANSITIONS.values.toList(),
             { settings.transition },
         ) { settings.transition = it })
+        rows.addView(choiceRow("Slow zoom on each photo", ON_OFF, ON_OFF_LABELS, { onOff(settings.slowZoom) }) {
+            settings.slowZoom = it == "on"
+        })
         rows.addView(choiceRow(
             "Photo display",
             Settings.FIT_MODES.keys.toList(), Settings.FIT_MODES.values.toList(),

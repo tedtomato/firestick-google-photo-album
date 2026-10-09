@@ -36,6 +36,9 @@ class SlideshowActivity : ComponentActivity() {
     /** Two of these are stacked; the hidden one loads the next photo, then they swap. */
     private class Slot(val root: FrameLayout, val backdrop: ImageView, val photo: ImageView)
 
+    /** Where the front photo's slow zoom or Ken Burns drift is heading, so it can resume after a pause. */
+    private class Motion(val scale: Float, val dx: Float, val dy: Float)
+
     private lateinit var library: Library
     private val settings get() = library.settings
 
@@ -57,6 +60,7 @@ class SlideshowActivity : ComponentActivity() {
     private var loadToken = 0
     private var failures = 0
     private var refreshJob: Job? = null
+    private var motion: Motion? = null
 
     private val advance = Runnable { showNext() }
 
@@ -133,7 +137,14 @@ class SlideshowActivity : ComponentActivity() {
     private fun togglePause() {
         paused = !paused
         pausedBadge.visibility = if (paused) View.VISIBLE else View.GONE
-        if (paused) handler.removeCallbacks(advance) else scheduleNext()
+        val photo = slots[front].photo
+        if (paused) {
+            handler.removeCallbacks(advance)
+            photo.animate().cancel() // freezes the zoom where it is
+        } else {
+            scheduleNext()
+            motion?.let { startMotion(photo, it, settings.intervalSeconds * 1000L) }
+        }
     }
 
     private fun startRefreshLoop() {
@@ -374,12 +385,35 @@ class SlideshowActivity : ComponentActivity() {
                     .setInterpolator(LinearInterpolator()).withEndAction(hideOutgoing)
             }
         }
-        if (type == "kenburns") kenBurns(incoming.photo, duration)
+        motion = null
+        when {
+            type == "kenburns" -> kenBurns(incoming.photo, duration)
+            settings.slowZoom -> slowZoom(incoming.photo, duration)
+        }
+    }
+
+    private fun photoMillis(transitionMs: Long) = settings.intervalSeconds * 1000L + transitionMs * 2
+
+    /** Zooms in by a few percent at a steady, barely noticeable pace while the photo is on screen. */
+    private fun slowZoom(view: View, transitionMs: Long) {
+        val total = photoMillis(transitionMs)
+        val scale = 1f + (total / 1000f * 0.005f).coerceIn(0.03f, 0.08f)
+        startMotion(view, Motion(scale, 0f, 0f), total)
+    }
+
+    private fun startMotion(view: View, target: Motion, durationMs: Long) {
+        motion = target
+        if (paused) return
+        view.animate()
+            .scaleX(target.scale).scaleY(target.scale)
+            .translationX(target.dx).translationY(target.dy)
+            .setDuration(durationMs)
+            .setInterpolator(LinearInterpolator())
     }
 
     /** Slow zoom with a gentle drift; the drift never exceeds the zoom margin, so no edges show. */
     private fun kenBurns(view: View, transitionMs: Long) {
-        val total = settings.intervalSeconds * 1000L + transitionMs * 2
+        val total = photoMillis(transitionMs)
         val maxScale = 1.15f
         val dx = (Random.nextFloat() * 2 - 1) * 0.06f * view.width
         val dy = (Random.nextFloat() * 2 - 1) * 0.06f * view.height
@@ -388,11 +422,8 @@ class SlideshowActivity : ComponentActivity() {
         view.scaleY = view.scaleX
         view.translationX = if (zoomIn) 0f else dx
         view.translationY = if (zoomIn) 0f else dy
-        view.animate()
-            .scaleX(if (zoomIn) maxScale else 1f).scaleY(if (zoomIn) maxScale else 1f)
-            .translationX(if (zoomIn) dx else 0f).translationY(if (zoomIn) dy else 0f)
-            .setDuration(total)
-            .setInterpolator(LinearInterpolator())
+        val target = if (zoomIn) Motion(maxScale, dx, dy) else Motion(1f, 0f, 0f)
+        startMotion(view, target, total)
     }
 
     private fun reset(view: View) {
