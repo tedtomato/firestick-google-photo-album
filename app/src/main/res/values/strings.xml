@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Photo Frame</string>
+    <string name="paused">❚❚  Paused</string>
+    <string name="add_from_phone">Add albums from your phone</string>
+    <string name="status_loading">Loading photos…</string>
+    <string name="status_no_albums">No albums yet.\nPress ☰ (Menu) or ▼ on the remote to add a shared Google Photos album.</string>
+    <string name="status_no_photos">No photos to show.\n%1$s\nPress ☰ (Menu) or ▼ to check your albums.</string>
+    <string name="status_offline">Can\'t load photos right now. Is the Fire TV online?\nTrying again shortly…</string>
+</resources>

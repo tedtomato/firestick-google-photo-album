@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <FrameLayout
+        android:id="@+id/slot_a"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="invisible">
+
+        <ImageView
+            android:id="@+id/backdrop_a"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:scaleType="centerCrop" />
+
+        <ImageView
+            android:id="@+id/photo_a"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:scaleType="fitCenter" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/slot_b"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="invisible">
+
+        <ImageView
+            android:id="@+id/backdrop_b"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:scaleType="centerCrop" />
+
+        <ImageView
+            android:id="@+id/photo_b"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:scaleType="fitCenter" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/status"
+        style="@style/Overlay"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:lineSpacingMultiplier="1.2"
+        android:maxWidth="720dp"
+        android:padding="32dp"
+        android:text="@string/status_loading"
+        android:textSize="24sp" />
+
+    <TextView
+        android:id="@+id/clock"
+        style="@style/Overlay"
+        android:layout_gravity="top|end"
+        android:layout_margin="40dp"
+        android:textSize="44sp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/photo_date"
+        style="@style/Overlay"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="40dp"
+        android:textSize="22sp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/paused"
+        style="@style/Overlay"
+        android:layout_gravity="top|start"
+        android:layout_margin="40dp"
+        android:background="@drawable/badge_background"
+        android:paddingStart="20dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="10dp"
+        android:text="@string/paused"
+        android:textSize="22sp"
+        android:visibility="gone" />
+</FrameLayout>
