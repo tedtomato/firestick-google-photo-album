@@ -19,16 +19,14 @@ for builds (GitHub Actions builds the APK).
   `gradle/actions/setup-gradle`, so the repo has **no Gradle wrapper**).
 
 ## Status
-- All code is written. It has **never been compiled or run**. The first CI run is the first compile, so
-  expect to fix a few compile errors.
-- No git repo yet, and no GitHub repo yet.
-- Still open (ask the user):
-  1. Public or private repo?
-     - Public: the Firestick's Downloader app can fetch
-       `https://github.com/<user>/<repo>/releases/latest/download/PhotoFrame.apk`.
-     - Private: install from a PC with `adb install -r PhotoFrame.apk` after turning on ADB debugging on
-       the Fire TV.
-  2. How to push: the session with GitHub access decides.
+- Repo: https://github.com/tedtomato/firestick-google-photo-album (public). CI builds every branch and
+  publishes the "latest" release from the default branch:
+  https://github.com/tedtomato/firestick-google-photo-album/releases/latest/download/PhotoFrame.apk
+- It compiles and the unit tests pass on CI (first try, no fixes needed).
+- Parser verified against a real album of the user's with the "Check album parsing" workflow
+  (`LiveAlbumTest`, opt-in via `PHOTOFRAME_TEST_ALBUM`): title found, 38 photos, images load at
+  `=w1920-h1080`. Paging (`snAcKc`) is still untested, since that album fits in the first page.
+- Not yet run on a real Fire TV.
 
 ## Where the files are
 The project currently sits in a temporary folder that belongs to the original Claude session. **It must be

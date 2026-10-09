@@ -32,12 +32,12 @@ It looks like `https://photos.app.goo.gl/AbCd1234`.
 
 ## Installing on the Fire TV
 
-Every push to `main` builds the APK with GitHub Actions and publishes it as the **latest** release.
+Every push to the default branch builds the APK with GitHub Actions and publishes it as the **latest** release.
 
 **Option A — Downloader app (public repo):**
 1. On the Fire TV: *Settings → My Fire TV → Developer options → Install unknown apps* → allow **Downloader**.
    (If Developer options is hidden: *Settings → My Fire TV → About*, click the device name 7 times.)
-2. In Downloader, enter `https://github.com/<you>/<repo>/releases/latest/download/PhotoFrame.apk`.
+2. In Downloader, enter `https://github.com/tedtomato/firestick-google-photo-album/releases/latest/download/PhotoFrame.apk`.
 
 **Option B — adb from a computer (works with a private repo):**
 1. On the Fire TV: *Developer options → ADB debugging* → On. Note its IP under *About → Network*.
@@ -54,6 +54,12 @@ Updates install over the old version and keep your albums and settings.
 - First launch opens the settings screen. Scan the QR code with your phone and paste album links, or type one
   with the remote.
 - Remote during the slideshow: **◀ ▶** previous / next, **OK** pause, **☰ Menu** or **▼** settings, **Back** exit.
+
+## Checking that an album still parses
+
+If photos stop appearing, run **Actions → Check album parsing → Run workflow** with an album link.
+It fetches the album on GitHub's servers and reports how many photos were found and whether one loads.
+The link is masked in the logs and only counts are printed.
 
 ## Building locally
 
