@@ -54,6 +54,11 @@ Every push to the default branch builds the APK with GitHub Actions and publishe
 
 Updates install over the old version and keep your albums and settings.
 
+If the app's tile on the Fire TV home screen looks blank or broken after an update, that's a known Fire OS
+bug with sideloaded apps, not the app itself. Restart the Fire TV (*Settings → My Fire TV → Restart*) and
+the icon comes back. The app keeps its icon in `drawable` folders, which the Fire TV launcher has been
+more reliable at finding than `mipmap` ones.
+
 ## Using it
 
 - First launch opens the settings screen. Scan the QR code with your phone and paste album links, or type one
