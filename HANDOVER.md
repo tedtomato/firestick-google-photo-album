@@ -27,7 +27,8 @@ for builds (GitHub Actions builds the APK).
 - Parser verified against a real album of the user's with the "Check album parsing" workflow
   (`LiveAlbumTest`, opt-in via `PHOTOFRAME_TEST_ALBUM`): title found, 38 photos, images load at
   `=w1920-h1080`. Paging (`snAcKc`) is still untested, since that album fits in the first page.
-- Not yet run on a real Fire TV.
+- Tested by the user on their Firestick: installs via tinyurl.com/tedframe, slideshow, slow zoom,
+  portrait pairs and the moiré fix all work, with no performance problems.
 
 ## Where the files are
 The project currently sits in a temporary folder that belongs to the original Claude session. **It must be
