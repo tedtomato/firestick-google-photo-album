@@ -82,6 +82,7 @@ checked on a 1,800-photo album, installed and used on the Firestick. Added on th
   TextureView over the poster frame. URLs tried in order: `=m37` (1080p), `=m22` (720p), `=m18` (360p),
   all H.264 MP4s from googlevideo.com, then `=dv` (original file). Probed on the user's album: `=m37` 404
   for a 720p video, `=m22`/`=m18` 206 MP4, `=dv` 200 MP4 without range support.
+  Verified playing on the user's Firestick.
 
 If the album page format changes, run the "Check album parsing" workflow with a link; its report shows
 the page shape, parsed counts and whether an image loads, without printing the link or any URLs.
