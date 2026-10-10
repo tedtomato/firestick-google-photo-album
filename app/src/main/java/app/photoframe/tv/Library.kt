@@ -19,6 +19,7 @@ data class Album(
     val title: String?,
     val resolvedUrl: String?,
     val photoCount: Int,
+    val videoCount: Int,
     val error: String?,
     val updatedAt: Long,
 )
@@ -67,7 +68,7 @@ class Library private constructor(context: Context) {
         synchronized(lock) {
             val albums = readAlbums()
             if (albums.any { it.link == link || it.resolvedUrl == link }) return AddResult.DUPLICATE
-            writeAlbums(albums + Album(link, null, null, 0, null, 0))
+            writeAlbums(albums + Album(link, null, null, 0, 0, null, 0))
         }
         changed()
         refreshAsync(link)
@@ -132,7 +133,8 @@ class Library private constructor(context: Context) {
                         result != null -> a.copy(
                             title = result.title ?: a.title,
                             resolvedUrl = result.resolvedUrl,
-                            photoCount = result.photos.size,
+                            photoCount = result.photos.count { !it.isVideo },
+                            videoCount = result.photos.count { it.isVideo },
                             error = null,
                             updatedAt = System.currentTimeMillis(),
                         )
@@ -151,11 +153,14 @@ class Library private constructor(context: Context) {
 
     fun statusOf(album: Album): String = when {
         isFetching(album.link) -> "Loading…"
-        album.error != null && album.updatedAt > 0 -> "${album.photoCount} photos (last update failed: ${album.error})"
+        album.error != null && album.updatedAt > 0 -> "${countsOf(album)} (last update failed: ${album.error})"
         album.error != null -> album.error
         album.updatedAt == 0L -> "Waiting to load…"
-        else -> "${album.photoCount} photos"
+        else -> countsOf(album)
     }
+
+    private fun countsOf(album: Album) =
+        "${album.photoCount} photos" + if (album.videoCount > 0) ", ${album.videoCount} videos" else ""
 
     fun messageFor(result: AddResult) = when (result) {
         AddResult.ADDED -> "Album added. Its photos will appear in a moment."
@@ -180,6 +185,7 @@ class Library private constructor(context: Context) {
                 title = o.optString("title").ifEmpty { null },
                 resolvedUrl = o.optString("resolvedUrl").ifEmpty { null },
                 photoCount = o.optInt("count"),
+                videoCount = o.optInt("videos"),
                 error = o.optString("error").ifEmpty { null },
                 updatedAt = o.optLong("updatedAt"),
             )
@@ -195,6 +201,7 @@ class Library private constructor(context: Context) {
                     .put("title", a.title)
                     .put("resolvedUrl", a.resolvedUrl)
                     .put("count", a.photoCount)
+                    .put("videos", a.videoCount)
                     .put("error", a.error)
                     .put("updatedAt", a.updatedAt)
             )
@@ -213,7 +220,7 @@ class Library private constructor(context: Context) {
                     val items = root.getJSONArray(link)
                     photosByAlbum[link] = (0 until items.length()).map { i ->
                         val p = items.getJSONArray(i)
-                        Photo(p.getString(0), p.getString(1), p.getInt(2), p.getInt(3), p.getLong(4))
+                        Photo(p.getString(0), p.getString(1), p.getInt(2), p.getInt(3), p.getLong(4), p.optBoolean(5))
                     }
                 }
             } catch (e: Exception) {
@@ -226,7 +233,7 @@ class Library private constructor(context: Context) {
         val root = JSONObject()
         for ((link, photos) in photosByAlbum) {
             val items = JSONArray()
-            for (p in photos) items.put(JSONArray().put(p.id).put(p.url).put(p.width).put(p.height).put(p.takenAt))
+            for (p in photos) items.put(JSONArray().put(p.id).put(p.url).put(p.width).put(p.height).put(p.takenAt).put(p.isVideo))
             root.put(link, items)
         }
         try {

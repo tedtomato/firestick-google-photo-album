@@ -22,13 +22,15 @@ class AlbumParserTest {
     fun parsesPhotosTitleAndPageToken() {
         val page = AlbumParser.parseAlbumHtml(albumHtml)
         assertEquals("Summer 2024 & friends", page.title)
-        assertEquals(listOf("AF1QipAAA", "AF1QipCCC"), page.photos.map { it.id }) // video skipped
+        assertEquals(listOf("AF1QipAAA", "AF1QipVID", "AF1QipCCC"), page.photos.map { it.id })
+        assertEquals(listOf(false, true, false), page.photos.map { it.isVideo })
         val first = page.photos[0]
         assertEquals("https://lh3.googleusercontent.com/pw/AAA", first.url)
         assertEquals(4032, first.width)
         assertEquals(3024, first.height)
         assertEquals(1690000000000L, first.takenAt)
-        assertEquals("https://lh3.googleusercontent.com/pw/CCC", page.photos[1].url) // size suffix stripped
+        assertEquals("https://lh3.googleusercontent.com/pw/VID", page.photos[1].url) // size suffix stripped
+        assertEquals("https://lh3.googleusercontent.com/pw/VID=dv", page.photos[1].videoUrl())
         assertEquals("NEXT_TOKEN", page.nextPageToken)
     }
 

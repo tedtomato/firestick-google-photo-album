@@ -61,10 +61,29 @@ class LiveAlbumTest {
 
             // 3. The full fetch the app does, including paging.
             val content = AlbumFetcher(client).fetch(link)
-            line("fetcher: ${content.photos.size} photos in total, title found ${content.title != null}")
+            val videos = content.photos.filter { it.isVideo }
+            line("fetcher: ${content.photos.size} items in total (${videos.size} videos), title found ${content.title != null}")
 
-            // 4. A photo at TV size.
-            val photo = content.photos.first()
+            // 4. Which video URL serves a playable file. A range request keeps the download tiny.
+            videos.firstOrNull()?.let { video ->
+                for (suffix in listOf("dv", "m37", "m22", "m18")) {
+                    val probe = Request.Builder().url("${video.url}=$suffix").header("Range", "bytes=0-1023").build()
+                    try {
+                        client.newCall(probe).execute().use { response ->
+                            val total = response.header("Content-Range")?.substringAfter('/') ?: response.header("Content-Length")
+                            val head = response.body?.bytes() ?: ByteArray(0)
+                            val mp4 = head.size >= 8 && String(head, 4, 4, Charsets.ISO_8859_1) == "ftyp"
+                            line("video =$suffix: HTTP ${response.code}, ${response.header("Content-Type")}, " +
+                                "total $total bytes, mp4 header $mp4, served by ${response.request.url.host}")
+                        }
+                    } catch (e: Exception) {
+                        line("video =$suffix: ${e.javaClass.simpleName}")
+                    }
+                }
+            }
+
+            // 5. A photo at TV size.
+            val photo = content.photos.first { !it.isVideo }
             client.newCall(Request.Builder().url(photo.sizedUrl(1920, 1080)).build()).execute().use { response ->
                 val bytes = response.body?.bytes()?.size ?: 0
                 line("image: HTTP ${response.code}, ${response.header("Content-Type")}, $bytes bytes")

@@ -203,7 +203,7 @@ class SlideshowActivity : ComponentActivity() {
     // ---- What to show next ----
 
     private fun reloadPool() {
-        val photos = library.photos()
+        val photos = library.photos().filter { !it.isVideo }
         val oldIds = pool.mapTo(HashSet()) { it.id }
         val newIds = photos.mapTo(HashSet()) { it.id }
         pool = photos

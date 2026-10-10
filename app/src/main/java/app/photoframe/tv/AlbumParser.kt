@@ -22,7 +22,7 @@ object AlbumParser {
     private val fallbackItemRegex =
         Regex("""\["(AF1Qip[^"]+)"\s*,\s*\["(https://[^"]*googleusercontent\.com/[^"]+)"\s*,\s*(\d+)\s*,\s*(\d+)""")
 
-    /** Videos carry their playback metadata under this key; their image URL is only a poster frame. */
+    /** Videos carry their playback metadata under this key; their image URL is a poster frame. */
     private const val VIDEO_MARKER = "\"76647426\""
     private const val MAX_DEPTH = 6
 
@@ -119,7 +119,7 @@ object AlbumParser {
         val photos = ArrayList<Photo>()
         for (i in 0 until items.length()) {
             val item = items.opt(i) as? JSONArray ?: continue
-            if (!isItem(item) || item.toString().contains(VIDEO_MARKER)) continue
+            if (!isItem(item)) continue
             val detail = item.getJSONArray(1)
             photos += Photo(
                 id = item.getString(0),
@@ -127,6 +127,7 @@ object AlbumParser {
                 width = number(detail, 1).toInt(),
                 height = number(detail, 2).toInt(),
                 takenAt = number(item, 2),
+                isVideo = item.toString().contains(VIDEO_MARKER),
             )
         }
         return photos
