@@ -93,6 +93,11 @@ class SettingsActivity : ComponentActivity() {
             Settings.FIT_MODES.keys.toList(), Settings.FIT_MODES.values.toList(),
             { settings.fitMode },
         ) { settings.fitMode = it })
+        rows.addView(choiceRow(
+            "Videos",
+            Settings.VIDEO_MODES.keys.toList(), Settings.VIDEO_MODES.values.toList(),
+            { settings.videos },
+        ) { settings.videos = it })
         rows.addView(choiceRow("Two portrait photos side by side", ON_OFF, ON_OFF_LABELS, { onOff(settings.pairPortraits) }) {
             settings.pairPortraits = it == "on"
         })

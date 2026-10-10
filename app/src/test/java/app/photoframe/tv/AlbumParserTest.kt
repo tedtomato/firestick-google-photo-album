@@ -30,7 +30,7 @@ class AlbumParserTest {
         assertEquals(3024, first.height)
         assertEquals(1690000000000L, first.takenAt)
         assertEquals("https://lh3.googleusercontent.com/pw/VID", page.photos[1].url) // size suffix stripped
-        assertEquals("https://lh3.googleusercontent.com/pw/VID=dv", page.photos[1].videoUrl())
+        assertEquals("https://lh3.googleusercontent.com/pw/VID=m37", page.photos[1].videoUrls().first())
         assertEquals("NEXT_TOKEN", page.nextPageToken)
     }
 

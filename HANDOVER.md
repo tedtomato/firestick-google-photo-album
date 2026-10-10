@@ -48,7 +48,7 @@ app/src/main/java/app/photoframe/tv/
   Photo.kt             data class; sizedUrl(w,h,crop) appends "=wW-hH[-c]" to the lh3 base URL
   AlbumParser.kt       pure parsing (unit-tested): AF_initDataCallback blocks → finds the array with the
                        most ["AF1Qip…",["https://lh3.googleusercontent.com/…",w,h,…],takenAt,…] items;
-                       skips videos (contain "76647426"); regex fallback; paging token; batchexecute parsing
+                       flags videos (contain "76647426"); regex fallback; paging token; batchexecute parsing
   AlbumFetcher.kt      OkHttp; follows short-link redirect; desktop UA + "SOCS=CAI; CONSENT=YES+" cookie
                        (EU consent wall); best-effort paging via POST /_/PhotosUi/data/batchexecute
                        rpcid "snAcKc" args [albumId, pageToken, null, key]  ← UNVERIFIED, failures ignored
@@ -78,12 +78,16 @@ checked on a 1,800-photo album, installed and used on the Firestick. Added on th
   resolution and scales them down with mipmaps, or loads them a bit softer when the photo has too few
   pixels, so the on-screen scale never sits near 1:1. `largeHeap` is on for the bigger bitmaps.
 - Short install link `tinyurl.com/tedframe` (owned by the user) → the GitHub "latest" release.
+- Videos (`Settings.videos`: off by default, muted, or with sound), played with Media3 ExoPlayer in a
+  TextureView over the poster frame. URLs tried in order: `=m37` (1080p), `=m22` (720p), `=m18` (360p),
+  all H.264 MP4s from googlevideo.com, then `=dv` (original file). Probed on the user's album: `=m37` 404
+  for a 720p video, `=m22`/`=m18` 206 MP4, `=dv` 200 MP4 without range support.
 
 If the album page format changes, run the "Check album parsing" workflow with a link; its report shows
 the page shape, parsed counts and whether an image loads, without printing the link or any URLs.
 
 ## Known limitations / ideas not done
-- Videos are skipped. HEIC and other formats are served by Google as JPEG/WebP through lh3, so they're fine.
+- HEIC and other photo formats are served by Google as JPEG/WebP through lh3, so they're fine.
 - Not registered as a Fire TV screensaver (DreamService). Possible later, but Fire OS makes choosing it
   awkward (adb `settings put secure screensaver_components …`).
 - No auto-start on boot.

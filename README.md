@@ -8,11 +8,11 @@ Photos added to an album later show up on the TV automatically, much like a Goog
 - Transitions: crossfade, Ken Burns (slow zoom and pan), slide, zoom, fade through black, or a random mix
 - A slight, very slow zoom on every photo (can be turned off)
 - Two portrait photos side by side, like a Nest Hub (can be turned off)
+- Optionally plays the videos in your albums, muted or with sound
 - Display modes: whole photo on a blurred background, fill the screen, or smart (fill landscape, fit portrait)
 - Optional clock and "date taken" overlays
 - Checks albums for new photos every 15 min to 12 h
 - Add albums by scanning a QR code on the TV and pasting the link on your phone
-- Videos in albums are skipped
 
 ## How it works
 

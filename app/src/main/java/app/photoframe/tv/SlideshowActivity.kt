@@ -9,7 +9,9 @@ import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.Gravity
 import android.view.KeyEvent
+import android.view.TextureView
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -21,6 +23,13 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
+import androidx.media3.exoplayer.ExoPlayer
 import com.bumptech.glide.Glide
 import com.bumptech.glide.MemoryCategory
 import com.bumptech.glide.RequestBuilder
@@ -45,9 +54,10 @@ class SlideshowActivity : ComponentActivity() {
 
     /**
      * Two of these are stacked; the hidden one loads the next slide, then they swap.
-     * A slide is one photo, or two portrait photos side by side (the second pane and the gap are hidden otherwise).
+     * A slide is one photo, or two portrait photos side by side (the second pane and the gap are hidden otherwise),
+     * or one video, which plays in [video] on top of its poster frame.
      */
-    private class Slot(val root: LinearLayout, val panes: List<Pane>, val gap: View)
+    private class Slot(val root: LinearLayout, val panes: List<Pane>, val gap: View, val video: TextureView)
 
     /** Where a photo's slow zoom or Ken Burns drift is heading, so it can resume after a pause. */
     private class Motion(val scale: Float, val dx: Float, val dy: Float)
@@ -75,6 +85,36 @@ class SlideshowActivity : ComponentActivity() {
     private var failures = 0
     private var refreshJob: Job? = null
     private var motions: List<Pair<View, Motion>> = emptyList()
+    private var player: ExoPlayer? = null
+    /** The slot whose video is playing, if any. */
+    private var videoSlot: Slot? = null
+    private var videoUrls: List<String> = emptyList()
+    private var videoAttempt = 0
+
+    private val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED) showNext()
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            // Try the next version of the video (e.g. 720p when there is no 1080p one).
+            if (videoSlot != null && videoAttempt + 1 < videoUrls.size) {
+                playVideoUrl(videoAttempt + 1)
+                return
+            }
+            // Leave the poster frame up for one normal interval, then move on.
+            handler.removeCallbacks(advance)
+            handler.postDelayed(advance, settings.intervalSeconds * 1000L)
+        }
+
+        override fun onRenderedFirstFrame() {
+            videoSlot?.video?.animate()?.alpha(1f)?.setDuration(400)
+        }
+
+        override fun onVideoSizeChanged(videoSize: VideoSize) {
+            videoSlot?.let { fitVideo(it.video, videoSize) }
+        }
+    }
 
     private val advance = Runnable { showNext() }
 
@@ -91,6 +131,7 @@ class SlideshowActivity : ComponentActivity() {
             Settings.KEY_INTERVAL -> scheduleNext()
             Settings.KEY_SHUFFLE -> queue.clear()
             Settings.KEY_CLOCK, Settings.KEY_DATE -> applyOverlays()
+            Settings.KEY_VIDEOS -> reloadPool()
         }
     }
 
@@ -126,6 +167,8 @@ class SlideshowActivity : ComponentActivity() {
             }
             Pane(root, backdrop, photo)
         }
+        val video = TextureView(this).apply { visibility = View.GONE }
+        panes[0].root.addView(video, FrameLayout.LayoutParams(match, match, Gravity.CENTER))
         val gap = View(this)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -136,7 +179,7 @@ class SlideshowActivity : ComponentActivity() {
             addView(panes[1].root, LinearLayout.LayoutParams(0, match, 1f))
         }
         stage.addView(root, match, match)
-        return Slot(root, panes, gap)
+        return Slot(root, panes, gap, video)
     }
 
     override fun onStart() {
@@ -151,7 +194,9 @@ class SlideshowActivity : ComponentActivity() {
             return
         }
         startRefreshLoop()
-        if (current == null) showNext() else scheduleNext()
+        player = ExoPlayer.Builder(this).build().apply { addListener(playerListener) }
+        // A video stopped when the screen went away; move on rather than restart it.
+        if (current == null || isVideo(current)) showNext() else scheduleNext()
     }
 
     override fun onStop() {
@@ -159,6 +204,9 @@ class SlideshowActivity : ComponentActivity() {
         library.prefs.unregisterOnSharedPreferenceChangeListener(prefsListener)
         handler.removeCallbacksAndMessages(null)
         refreshJob?.cancel()
+        stopVideo()
+        player?.release()
+        player = null
         super.onStop()
     }
 
@@ -179,6 +227,7 @@ class SlideshowActivity : ComponentActivity() {
     private fun togglePause() {
         paused = !paused
         pausedBadge.visibility = if (paused) View.VISIBLE else View.GONE
+        if (isVideo(current)) player?.playWhenReady = !paused
         if (paused) {
             handler.removeCallbacks(advance)
             for ((view, _) in motions) view.animate().cancel() // freezes the zoom where it is
@@ -203,7 +252,7 @@ class SlideshowActivity : ComponentActivity() {
     // ---- What to show next ----
 
     private fun reloadPool() {
-        val photos = library.photos().filter { !it.isVideo }
+        val photos = library.photos().filter { !it.isVideo || settings.videos != "off" }
         val oldIds = pool.mapTo(HashSet()) { it.id }
         val newIds = photos.mapTo(HashSet()) { it.id }
         pool = photos
@@ -257,7 +306,7 @@ class SlideshowActivity : ComponentActivity() {
     private fun canPair(photo: Photo): Boolean {
         if (!settings.pairPortraits) return false
         val (w, h) = stageSize()
-        return w > h && photo.width > 0 && photo.height > photo.width * 1.1f
+        return w > h && !photo.isVideo && photo.width > 0 && photo.height > photo.width * 1.1f
     }
 
     private fun showNext() {
@@ -300,9 +349,10 @@ class SlideshowActivity : ComponentActivity() {
         return if (paired) (w - gapPx) / 2 to h else w to h
     }
 
-    private fun shouldCrop(photo: Photo, w: Int, h: Int): Boolean = when (settings.fitMode) {
-        "fill" -> true
-        "smart" -> {
+    private fun shouldCrop(photo: Photo, w: Int, h: Int): Boolean = when {
+        photo.isVideo -> false // shown whole, so the poster frame lines up with the video
+        settings.fitMode == "fill" -> true
+        settings.fitMode == "smart" -> {
             val area = w.toFloat() / h
             abs(photo.aspect - area) / area < 0.2f
         }
@@ -446,7 +496,9 @@ class SlideshowActivity : ComponentActivity() {
                 ""
             }
         }
+        stopVideo()
         animateSwap(outgoing, incoming, slide.size, backwards)
+        if (isVideo(slide)) startVideo(incoming, slide[0])
         scheduleNext()
         preloadNext()
     }
@@ -456,7 +508,9 @@ class SlideshowActivity : ComponentActivity() {
     private fun scheduleNext() {
         handler.removeCallbacks(advance)
         if (started && !paused && current != null) {
-            handler.postDelayed(advance, settings.intervalSeconds * 1000L + transitionMillis())
+            // A video moves on when it ends; this is only a fallback if it stalls.
+            val delay = if (isVideo(current)) MAX_VIDEO_MS else settings.intervalSeconds * 1000L + transitionMillis()
+            handler.postDelayed(advance, delay)
         }
     }
 
@@ -473,6 +527,7 @@ class SlideshowActivity : ComponentActivity() {
 
         val hideOutgoing = Runnable {
             outgoing.root.visibility = View.INVISIBLE
+            if (outgoing !== videoSlot) outgoing.video.visibility = View.GONE
             reset(outgoing.root)
             for (pane in outgoing.panes) {
                 pane.photo.animate().cancel()
@@ -517,6 +572,7 @@ class SlideshowActivity : ComponentActivity() {
 
         val (w, h) = paneSize(photoCount > 1)
         motions = when {
+            isVideo(current) -> emptyList()
             type == "kenburns" -> incomingPhotos.map { it to kenBurns(it, w, h) }
             settings.slowZoom -> incomingPhotos.map { it to Motion(slowZoomScale(), 0f, 0f) }
             else -> emptyList()
@@ -562,6 +618,56 @@ class SlideshowActivity : ComponentActivity() {
         view.translationY = 0f
     }
 
+    // ---- Videos ----
+
+    private fun isVideo(slide: List<Photo>?) = slide?.firstOrNull()?.isVideo == true
+
+    private fun startVideo(slot: Slot, video: Photo) {
+        val player = player ?: return
+        videoSlot = slot
+        slot.video.animate().cancel()
+        slot.video.alpha = 0f // fades in over the poster frame once the first frame is ready
+        slot.video.visibility = View.VISIBLE
+        val withSound = settings.videos == "sound"
+        player.setAudioAttributes(VIDEO_AUDIO, withSound)
+        player.volume = if (withSound) 1f else 0f
+        player.setVideoTextureView(slot.video)
+        videoUrls = video.videoUrls()
+        playVideoUrl(0)
+    }
+
+    private fun playVideoUrl(attempt: Int) {
+        val player = player ?: return
+        videoAttempt = attempt
+        player.setMediaItem(MediaItem.fromUri(videoUrls[attempt]))
+        player.prepare()
+        player.playWhenReady = !paused
+    }
+
+    /** Stops playback; the video view keeps its last frame until the transition hides it. */
+    private fun stopVideo() {
+        val slot = videoSlot ?: return
+        videoSlot = null
+        player?.run {
+            stop()
+            clearMediaItems()
+            clearVideoTextureView(slot.video)
+        }
+    }
+
+    /** Sizes the video view to show the whole video, centred in its pane like the poster frame. */
+    private fun fitVideo(view: TextureView, size: VideoSize) {
+        if (size.width <= 0 || size.height <= 0) return
+        val aspect = size.width * size.pixelWidthHeightRatio / size.height
+        val (w, h) = paneSize(false)
+        val (videoW, videoH) = if (aspect > w.toFloat() / h) {
+            w to (w / aspect).roundToInt()
+        } else {
+            (h * aspect).roundToInt() to h
+        }
+        view.layoutParams = FrameLayout.LayoutParams(videoW, videoH, Gravity.CENTER)
+    }
+
     // ---- Overlays ----
 
     private fun applyOverlays() {
@@ -595,5 +701,13 @@ class SlideshowActivity : ComponentActivity() {
 
         /** Keeps the loaded bitmap within what old Fire TV sticks handle comfortably. */
         const val MAX_LOAD_SIDE = 3072
+
+        /** Moves on from a video that hasn't ended by then, e.g. because it stalled. */
+        const val MAX_VIDEO_MS = 5 * 60_000L
+
+        val VIDEO_AUDIO: AudioAttributes = AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+            .build()
     }
 }
