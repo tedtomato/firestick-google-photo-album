@@ -25,7 +25,8 @@ Trade-offs to be aware of:
 - **Anyone with an album's link can view that album.** The link isn't listed anywhere, but treat it like a key.
 - **It's not an official API.** If Google changes that page, the app may stop finding photos until the parser
   (`AlbumParser.kt`) is updated. Photos already cached keep playing in the meantime.
-- Albums of more than about 300 photos rely on an extra, best-effort paging request.
+- Albums of more than about 300 photos are loaded page by page with a second, unofficial request
+  (tested with an album of 1,800+ photos). If that request ever breaks, the app keeps the first ~300.
 
 ## Getting a shared album link
 

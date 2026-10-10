@@ -26,7 +26,8 @@ for builds (GitHub Actions builds the APK).
 - It compiles and the unit tests pass on CI (first try, no fixes needed).
 - Parser verified against a real album of the user's with the "Check album parsing" workflow
   (`LiveAlbumTest`, opt-in via `PHOTOFRAME_TEST_ALBUM`): title found, 38 photos, images load at
-  `=w1920-h1080`. Paging (`snAcKc`) is still untested, since that album fits in the first page.
+  `=w1920-h1080`. Paging (`snAcKc`) verified on the user's Firestick with an album of ~1800 photos
+  (1829 found).
 - Tested by the user on their Firestick: installs via tinyurl.com/tedframe, slideshow, slow zoom,
   portrait pairs and the moiré fix all work, with no performance problems.
 
@@ -67,22 +68,19 @@ app/src/test/java/app/photoframe/tv/AlbumParserTest.kt   synthetic HTML/batch fi
 README.md              user-facing setup and install instructions
 ```
 
-## Next steps
-1. Create the GitHub repo (public or private, per the user's answer), commit everything including
-   `app/photoframe.jks`, and push to `main`.
-2. Watch the Actions run, then fix compile, test or lint errors until it's green. Likely trouble spots:
-   - Glide 4.16 `RequestListener` override signatures in `SlideshowActivity.display()`. If they fight you,
-     switch to `CustomTarget`, but clear old targets so bitmaps aren't leaked.
-   - Kotlin overload or nullability nits.
-   - `gradle/actions/setup-gradle@v4` `gradle-version` input.
-3. Test the parser on a real album. Ask the user for a share link, or check that one of their albums
-   parses (title, photo count, URLs load at `=w1920-h1080`). The format reference was the actively
-   maintained WordPress plugin "Shared Albums for Google Photos" (JanZeman), `includes/class-data-provider.php`.
-   Per that plugin, the album page exposes about 300 items.
-4. Test paging on an album with more than 300 photos. If `snAcKc` doesn't work, either find the right rpc
-   format or document the ~300 limit (the app already handles the failure gracefully).
-5. Install on the Firestick and check: first launch opens settings, the QR page works from a phone, the
-   slideshow and transitions run, the remote keys work, and the screensaver doesn't kick in.
+## Done since the first handover
+All the original next steps are done: repo created, CI green, parser checked on a real album, paging
+checked on a 1,800-photo album, installed and used on the Firestick. Added on the user's request:
+- Slow zoom on every photo (`Settings.slowZoom`, on by default).
+- Two portrait photos side by side (`Settings.pairPortraits`, on by default). A slide is one or two
+  photos; each slot has two panes.
+- Moiré fix for zooming photos: `SlideshowActivity.loadScale` loads moving photos 1.3–1.5× the screen
+  resolution and scales them down with mipmaps, or loads them a bit softer when the photo has too few
+  pixels, so the on-screen scale never sits near 1:1. `largeHeap` is on for the bigger bitmaps.
+- Short install link `tinyurl.com/tedframe` (owned by the user) → the GitHub "latest" release.
+
+If the album page format changes, run the "Check album parsing" workflow with a link; its report shows
+the page shape, parsed counts and whether an image loads, without printing the link or any URLs.
 
 ## Known limitations / ideas not done
 - Videos are skipped. HEIC and other formats are served by Google as JPEG/WebP through lh3, so they're fine.
